@@ -33,6 +33,7 @@
             font-size: 18px; font-weight: bold; border-radius: 30px; border: 2px solid #00ffcc;
             box-shadow: 0 0 25px rgba(0,255,204,0.6); pointer-events: none; z-index: 1000;
             text-align: center; animation: pulse-banner 1s infinite alternate;
+            display: none;
         }
 
         #camera-toggle-btn {
@@ -231,9 +232,14 @@
             document.getElementById("loading-text").innerText = `资源加载中 ${percent}%`;
             document.getElementById("progress-fill").style.width = percent + "%";
         };
+
         loadingManager.onLoad = function () {
             setTimeout(() => {
-                document.getElementById("loading-screen").style.opacity = "0"; 
+                document.getElementById("loading-screen").style.opacity = "0"; // 触发淡出
+        
+             // 💡 核心修改：当加载屏开始淡出时，正式亮起 WASD 新手引导！
+                document.getElementById("guide-banner").style.display = "block"; 
+                
                 setTimeout(() => {
                     document.getElementById("loading-screen").style.display = "none";
                 }, 500); 
