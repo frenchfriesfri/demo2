@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>星际社交巡逻队 - 终极修复加入群聊版</title>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; user-select: none; background: #050510; }
+        #game-container { width: 100vw; height: 100vh; position: absolute; top:0; left:0; z-index: 1; }
+        
+        #ui-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
+        
+        #ui-layer {
+            position: absolute; top: 20px; left: 20px; color: white;
+            background: rgba(0, 0, 0, 0.7); padding: 15px; border-radius: 8px; pointer-events: none;
+        }
+        h3 { margin: 0 0 10px 0; color: #00ffcc; }
+        
+        /* 底部中央新手引导横条 */
+        #guide-banner {
+            position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
+            background: rgba(10, 35, 80, 0.95); color: #00ffcc; padding: 14px 40px;
+            font-size: 18px; font-weight: bold; border-radius: 30px; border: 2px solid #00ffcc;
+            box-shadow: 0 0 25px rgba(0,255,204,0.6); pointer-events: none; z-index: 1000;
+            text-align: center; animation: pulse-banner 1s infinite alternate;
+        }
+
+        #camera-toggle-btn {
+            position: absolute; bottom: 30px; right: 30px;
+            padding: 15px 30px; font-size: 18px; font-weight: bold; color: #00ffcc;
+            background: rgba(10, 25, 50, 0.9); border: 2px solid #00ffcc; border-radius: 30px;
+            cursor: pointer; box-shadow: 0 0 15px rgba(0,255,204,0.4); pointer-events: auto;
+            display: none; 
+        }
+        #camera-toggle-btn:hover { background: #00ffcc; color: #0a1932; }
+
+        #viewfinder-ui {
+            position: absolute; top: 0; left: 0; width: 100vw; height: 100vh;
+            pointer-events: none; display: none; box-sizing: border-box; border: 20px solid rgba(0, 0, 0, 0.5);
+        }
+        .corner { position: absolute; width: 40px; height: 40px; border: 4px solid #00ffcc; }
+        .tl { top: 20px; left: 20px; border-right: none; border-bottom: none; }
+        .tr { top: 20px; right: 20px; border-left: none; border-bottom: none; }
+        .bl { bottom: 20px; left: 20px; border-right: none; border-top: none; }
+        .br { bottom: 20px; right: 20px; border-left: none; border-top: none; }
+        
+        .rec-indicator { position: absolute; top: 40px; left: 50px; color: #ff3333; font-size: 20px; font-weight: bold; display: flex; align-items: center; }
+        .rec-dot { width: 14px; height: 14px; background: #ff3333; border-radius: 50%; margin-right: 8px; animation: blink 1s infinite; }
+        
+        .crosshair { position: absolute; top: 50%; left: 50%; width: 30px; height: 30px; transform: translate(-50%, -50%); border: 2px solid #00ffcc; border-radius: 50%; }
+        .crosshair::before { content: ''; position: absolute; top: 14px; left: -5px; width: 40px; height: 2px; background: #00ffcc; }
+        .crosshair::after { content: ''; position: absolute; left: 14px; top: -5px; height: 40px; width: 2px; background: #00ffcc; }
+
+        #alert-banner {
+            position: absolute; top: 15%; left: 50%; transform: translateX(-50%);
+            background: rgba(255, 0, 50, 0.9); color: white; padding: 12px 40px;
+            font-size: 22px; font-weight: bold; border-radius: 5px; border: 2px solid #ffffff;
+            box-shadow: 0 0 20px #ff0032; display: none;
+        }
+
+        #record-action-btn {
+            position: absolute; bottom: 280px; left: 50%; transform: translateX(-50%);
+            padding: 15px 40px; font-size: 20px; font-weight: bold; color: white;
+            background: #ff3333; border: none; border-radius: 10px; cursor: pointer;
+            box-shadow: 0 0 20px rgba(255,51,51,0.6); display: none; pointer-events: auto;
+        }
+
+        /* 统一气泡基础样式 */
+        .html-bubble {
+            position: absolute; transform: translate(-50%, -100%);
+            padding: 10px 16px; font-size: 13px; font-weight: bold; border-radius: 10px;
+            pointer-events: none; display: none; z-index: 999;
+            width: max-content;
+            max-width: 280px; 
+            white-space: normal !important; 
+            word-break: break-all;
+            line-height: 1.5; 
+            text-align: center;
+        }
+        .html-bubble::after {
+            content: ''; position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
+            border-width: 6px 6px 0; border-style: solid; display: block; width: 0;
+        }
+        
+        /* 正常/修复后的绿蓝色皮肤 */
+        .bubble-normal { 
+            background: rgba(5, 20, 45, 0.95); 
+            color: #00ffcc; 
+            border: 2px solid #00ffcc; 
+            box-shadow: 0 0 10px rgba(0,255,204,0.3); 
+        }
+        .bubble-normal::after { border-color: #00ffcc transparent; }
+
+        /* 故障时的红色皮肤 */
+        .bubble-glitch { 
+            background: rgba(120, 0, 15, 0.95); 
+            color: #ffffff; 
+            border: 2px solid #ff3333; 
+            box-shadow: 0 0 20px rgba(255,0,0,0.6);
+        }
+        .bubble-glitch::after { border-color: #ff3333 transparent; }
+
+        /* 🛠️ 优化无字浮动气泡样式：用纯文字渲染，加上漂浮过渡特效 */
+        .html-bubble.is-silent {
+            padding: 6px 12px;
+            font-size: 12px;
+            opacity: 0.85;
+            animation: text-bubble-float 1.8s infinite ease-in-out alternate;
+        }
+
+        #practice-game-ui {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 550px; background: rgba(15, 25, 50, 0.95); border: 3px solid #00ffcc;
+            border-radius: 20px; padding: 30px; color: white; display: none;
+            box-shadow: 0 0 30px rgba(0, 255, 204, 0.5); z-index: 2000; pointer-events: auto;
+        }
+        .game-title { text-align: center; color: #00ffcc; margin-top: 0; font-size: 24px; }
+        .game-desc { font-size: 16px; color: #a0aec0; margin-bottom: 25px; text-align: center; }
+        
+        .distance-slider-container { width: 100%; height: 40px; background: #2d3748; border-radius: 20px; position: relative; margin-bottom: 25px; overflow: hidden; }
+        .safe-zone { position: absolute; left: 40%; width: 25%; height: 100%; background: #48bb78; }
+        .safe-label { position: absolute; left: 40%; width: 25%; text-align: center; line-height: 40px; font-size: 12px; font-weight: bold; color: white; z-index: 5; }
+        .distance-indicator { position: absolute; left: 10%; width: 16px; height: 100%; background: #ff3333; box-shadow: 0 0 10px #ff3333; }
+        
+        #quiz-section { display: none; border-top: 1px solid #4a5568; padding-top: 20px; }
+        .quiz-bubble { background: #2d3748; padding: 15px; border-radius: 10px; margin-bottom: 20px; font-size: 18px; border-left: 5px solid #ffcc00; }
+        .quiz-option { width: 100%; padding: 12px; background: #3182ce; border: none; border-radius: 8px; color: white; font-size: 16px; font-weight: bold; margin-bottom: 10px; cursor: pointer; text-align: left; }
+        .quiz-option:hover { background: #2b6cb0; }
+
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        @keyframes pulse-banner { 0% { transform: translateX(-50%) scale(1); } 100% { transform: translateX(-50%) scale(1.02); } }
+        
+        /* 文字气泡优雅上下浮动、淡入淡出动感特效 */
+        @keyframes text-bubble-float {
+            0% { transform: translate(-50%, -90%); opacity: 0.5; }
+            100% { transform: translate(-50%, -115%); opacity: 1; }
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+</head>
+<body>
+
+    <div id="game-container"></div>
+
+    <div id="ui-container">
+        <div id="guide-banner">🚀 欢迎来到训练场！使用 W, A, S, D 移动，Space 跳跃，自由探索世界吧！</div>
+
+        <div id="ui-layer">
+            <h3>星际社交巡逻队 v5.5 (剧情引导版)</h3>
+            <p id="move-tip">移动：W, A, S, D | 旋转：鼠标左键水平拖拽</p>
+            <p>剧本：观察正常社交的距离，当红色故障机器人靠近插话时自由运镜并开启录制！</p>
+        </div>
+
+        <button id="camera-toggle-btn" onclick="toggleCameraMode()">📸 开启巡逻相机</button>
+
+        <div id="viewfinder-ui">
+            <div class="corner tl"></div><div class="corner tr"></div>
+            <div class="corner bl"></div><div class="corner br"></div>
+            <div class="rec-indicator"><div class="rec-dot"></div>● REC</div>
+            <div class="crosshair"></div>
+            <div id="alert-banner">[ ! ] WARNING: GLITCH DETECTED</div>
+            
+            <button id="record-action-btn" onclick="startGlitchRecording()">📹 录制故障行为</button>
+        </div>
+
+        <div id="bubble-npc-a1" class="html-bubble bubble-normal"></div>
+        <div id="bubble-npc-a2" class="html-bubble bubble-normal"></div>
+        <div id="bubble-npc-b1" class="html-bubble bubble-normal"></div>
+        <div id="bubble-glitch" class="html-bubble bubble-glitch"></div>
+    </div>
+
+    <div id="practice-game-ui">
+        <h2 class="game-title">🛠 芯片修复：第一视角安全距离测算</h2>
+        <p class="game-desc">请使用键盘的左右方向键（← / →）操作机器人的推进器，使其停留在绿色安全社交距离区内。</p>
+        
+        <div class="distance-slider-container">
+            <div class="safe-zone"></div>
+            <div class="safe-label">安全距离 (1-1.5米)</div>
+            <div id="distance-pointer" class="distance-indicator"></div>
+        </div>
+
+        <div id="quiz-section">
+            <h2 class="game-title" style="color: #ffcc00;">💬 社交雷达：倾听与同步</h2>
+            <div class="quiz-bubble">正常聊天的机器人小组正在热烈地讨论：<br><strong>“昨晚那场太空棒球比赛太精彩了！”</strong></div>
+            <button class="quiz-option" onclick="handleQuizAnswer(false)">A. 我今天买了个新飞船！</button>
+            <button class="quiz-option" onclick="handleQuizAnswer(true)">B. 你们也喜欢看昨晚的彗星杯比赛吗？</button>
+            <button class="quiz-option" onclick="handleQuizAnswer(false)">C. 闪开，别挡着我的道！</button>
+        </div>
+    </div>
+
+    <script>
+        const SCENE_Y_OFFSET = 0; 
+        const INNER_WALL_RADIUS = 15.0; 
+
+        const MODEL_CONFIG = {
+            ground: 'scene.gltf',                          
+            playerIdle: 'Idle.glb',                   
+            playerWalk: 'Walking.glb',                     
+            robotTalk1: 'Talking (1).glb',
+            robotTalk2: 'Talking (2).glb',
+            robotArgue: 'Standing Arguing.glb',
+            glitchRun: 'Running.glb',
+            glitchJump: 'Jumping Up.glb',
+            glitchDance: 'Silly Dancing.glb'
+        };
+
+        let scene, camera, renderer, controls;
+        let environmentMesh; 
+        let player, playerIdleMesh, playerWalkMesh; 
+        let glitchRobot;
+        
+        let npcA1, npcA2, npcB1;
+        let npcGroup = new THREE.Group(); 
+        
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let canJump = true;
+        let playerVelocity = new THREE.Vector3();
+        const PLAYER_SPEED = 14.0; const JUMP_FORCE = 10.0; const GRAVITY = 28.0; 
+        let clock = new THREE.Clock();
+        const loader = new THREE.GLTFLoader();
+
+        let idleMixer, walkMixer; 
+        let currentActionState = "idle"; 
+        let robotMixers = [];     
+
+        let isCameraMode = false; let isRecordingSequence = false; 
+        let recordingTimer = 0; let animationStage = 0; 
+        
+        let raycaster = new THREE.Raycaster(); let mouse = new THREE.Vector2(0, 0);   
+
+        let mockDistancePercent = 10; let isPracticeGameActive = false;
+        
+        let isGlitchFixed = false; 
+        let isCelebrating = false;
+        let celebrationTimer = 0;
+
+        const ROBOT_SCALE = 110.0;
+        const PLAYER_SCALE = 0.7; 
+
+        const GLITCH_START_POS = new THREE.Vector3(5.5, 0, -2.0);
+        const GLITCH_TARGET_POS = new THREE.Vector3(-1.6, 0, -3.2); 
+        let glitchMoveTimer = 0;
+        let isGlitchArrived = false;
+
+        let glitchMeshes = {};
+        let currentGlitchState = '';
+
+        let gameElapsedTime = 0;
+        let currentPhase = 'exploration'; 
+
+        init();
+        animate();
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050510); 
+            scene.fog = new THREE.FogExp2(0x050510, 0.002); 
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1500);
+            camera.position.set(0, 5.5, 6.5); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.outputEncoding = THREE.sRGBEncoding; 
+            document.getElementById('game-container').appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; controls.dampingFactor = 0.05;
+            
+            const lockedAngle = Math.PI / 2.8; 
+            controls.minPolarAngle = lockedAngle;
+            controls.maxPolarAngle = lockedAngle;
+            controls.minDistance = 4.0;
+            controls.maxDistance = 15.0;
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 1.8); scene.add(ambientLight);
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444466, 1.5); hemiLight.position.set(0, 100, 0); scene.add(hemiLight);
+            const dirLight = new THREE.DirectionalLight(0xffffff, 1.0); dirLight.position.set(50, 150, 50); scene.add(dirLight);
+
+            loader.load(MODEL_CONFIG.ground, function (gltf) { 
+                environmentMesh = gltf.scene;
+                const box = new THREE.Box3().setFromObject(environmentMesh);
+                const center = box.getCenter(new THREE.Vector3());
+                environmentMesh.position.x -= center.x;
+                environmentMesh.position.z -= center.z;
+                environmentMesh.position.y = SCENE_Y_OFFSET; 
+                scene.add(environmentMesh); 
+            });
+
+            player = new THREE.Group();
+            player.position.set(0, 0, 0); 
+            scene.add(player);
+            
+            loader.load(MODEL_CONFIG.playerIdle, function (gltf) {
+                playerIdleMesh = gltf.scene;
+                playerIdleMesh.scale.set(PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE); 
+                player.add(playerIdleMesh);
+                if (gltf.animations && gltf.animations.length > 0) {
+                    idleMixer = new THREE.AnimationMixer(playerIdleMesh);
+                    idleMixer.clipAction(gltf.animations[0]).play();
+                }
+            });
+
+            loader.load(MODEL_CONFIG.playerWalk, function (gltf) {
+                playerWalkMesh = gltf.scene;
+                playerWalkMesh.scale.set(PLAYER_SCALE, PLAYER_SCALE, PLAYER_SCALE); 
+                playerWalkMesh.visible = false; 
+                player.add(playerWalkMesh);
+                if (gltf.animations && gltf.animations.length > 0) {
+                    walkMixer = new THREE.AnimationMixer(playerWalkMesh);
+                    walkMixer.clipAction(gltf.animations[0]).play();
+                }
+            });
+
+            controls.target.copy(player.position);
+
+            scene.add(npcGroup);
+
+            const centerA = new THREE.Vector3(-2.8, 0, -3.5);
+            npcA1 = createTrackedNPC(MODEL_CONFIG.robotTalk1, new THREE.Vector3(-2.8, 0, -4.3), centerA);
+            npcA2 = createTrackedNPC(MODEL_CONFIG.robotTalk2, new THREE.Vector3(-3.5, 0, -3.0), centerA);
+            createTrackedNPC(MODEL_CONFIG.robotArgue, new THREE.Vector3(-2.1, 0, -3.0), centerA);
+
+            const posB1 = new THREE.Vector3(2.2, 0, -4.5);
+            const posB2 = new THREE.Vector3(3.4, 0, -4.5);
+            npcB1 = createTrackedNPC(MODEL_CONFIG.robotTalk1, posB1, posB2);
+            createTrackedNPC(MODEL_CONFIG.robotTalk2, posB2, posB1);
+
+            glitchRobot = new THREE.Group(); 
+            glitchRobot.position.copy(GLITCH_START_POS); 
+            npcGroup.add(glitchRobot); 
+            loadGlitchNPC(glitchRobot);
+
+            npcGroup.visible = false;
+
+            window.addEventListener('keydown', onKeyDown);
+            window.addEventListener('keyup', onKeyUp);
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function setGlitchState(stateName) {
+            if (currentGlitchState === stateName) return;
+            currentGlitchState = stateName;
+            Object.keys(glitchMeshes).forEach(key => {
+                if (glitchMeshes[key]) {
+                    glitchMeshes[key].visible = (key === stateName);
+                }
+            });
+        }
+
+        function loadGlitchSubModel(modelUrl, stateKey, targetGroup, isVisible, isRed) {
+            loader.load(modelUrl, function(gltf) {
+                const mesh = gltf.scene;
+                mesh.scale.set(ROBOT_SCALE, ROBOT_SCALE, ROBOT_SCALE);
+                mesh.rotation.y = 0; 
+                mesh.visible = isVisible;
+                targetGroup.add(mesh);
+                glitchMeshes[stateKey] = mesh;
+
+                if (isRed) {
+                    mesh.traverse(child => {
+                        if(child.isMesh && child.material) {
+                            child.material = child.material.clone(); 
+                            child.material.emissive = new THREE.Color(0xff0000); 
+                            child.material.emissiveIntensity = 0.6;
+                        }
+                    });
+                }
+
+                if(gltf.animations && gltf.animations.length > 0){
+                    const mixer = new THREE.AnimationMixer(mesh); 
+                    mixer.clipAction(gltf.animations[0]).play(); 
+                    robotMixers.push(mixer);
+                }
+            });
+        }
+
+        function loadGlitchNPC(targetGroup) {
+            loadGlitchSubModel(MODEL_CONFIG.glitchRun, 'run', targetGroup, true, true);
+            currentGlitchState = 'run';
+            
+            loadGlitchSubModel(MODEL_CONFIG.glitchJump, 'jump', targetGroup, false, true);
+            loadGlitchSubModel(MODEL_CONFIG.glitchDance, 'dance', targetGroup, false, false);
+            loadGlitchSubModel(MODEL_CONFIG.robotTalk1, 'talk', targetGroup, false, false);
+
+            const hitbox = new THREE.Mesh(new THREE.BoxGeometry(2.5, 2.0, 2.5), new THREE.MeshBasicMaterial({ visible: false })); 
+            hitbox.position.y = 1.0; hitbox.name = "Glitch_Target"; 
+            targetGroup.add(hitbox);
+            
+            const core = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true })); 
+            core.position.y = 1.8; core.name = "glitchCore"; 
+            targetGroup.add(core);
+        }
+
+        function createTrackedNPC(modelUrl, pos, lookTarget) {
+            const container = new THREE.Group();
+            container.position.copy(pos);
+            npcGroup.add(container); 
+
+            loader.load(modelUrl, function(gltf) {
+                const mesh = gltf.scene;
+                mesh.scale.set(ROBOT_SCALE, ROBOT_SCALE, ROBOT_SCALE);
+                mesh.rotation.y = 0; 
+                container.add(mesh);
+                container.lookAt(lookTarget.x, container.position.y, lookTarget.z);
+
+                if(gltf.animations && gltf.animations.length > 0){
+                    const mixer = new THREE.AnimationMixer(mesh); 
+                    mixer.clipAction(gltf.animations[0]).play(); 
+                    robotMixers.push(mixer);
+                }
+            });
+            return container;
+        }
+
+        function updatePlayerActionState() {
+            if (isCameraMode) return;
+            if (!playerIdleMesh || !playerWalkMesh) return;
+            const isMoving = moveForward || moveBackward || moveLeft || moveRight;
+            if (isMoving && currentActionState === "idle") {
+                playerIdleMesh.visible = false; playerWalkMesh.visible = true; currentActionState = "walk";
+            } else if (!isMoving && currentActionState === "walk") {
+                playerIdleMesh.visible = true; playerWalkMesh.visible = false; currentActionState = "idle";
+            }
+        }
+
+        function toggleCameraMode() {
+            if(isRecordingSequence || isPracticeGameActive) return;
+            isCameraMode = !isCameraMode;
+            const btn = document.getElementById('camera-toggle-btn');
+            const viewfinder = document.getElementById('viewfinder-ui');
+
+            if (isCameraMode) {
+                btn.innerText = "❌ 退出拍照模式"; viewfinder.style.display = 'block';
+                if (playerIdleMesh) playerIdleMesh.visible = false;
+                if (playerWalkMesh) playerWalkMesh.visible = false;
+                
+                controls.minDistance = 0.1; controls.maxDistance = 10;
+                camera.position.set(player.position.x, player.position.y + 1.8, player.position.z + 4.0);
+                controls.target.set(player.position.x, player.position.y + 1.4, player.position.z);
+
+                currentPhase = 'activeCamera';
+                document.getElementById('guide-banner').innerText = "🔍 有一个机器人好像有些问题，将摄像机中间的圆点对准他，看看会发生什么。";
+            } else {
+                btn.innerText = "📸 开启巡逻相机"; viewfinder.style.display = 'none';
+                document.getElementById('alert-banner').style.display = 'none';
+                document.getElementById('record-action-btn').style.display = 'none';
+                currentActionState = "idle"; 
+                if (playerIdleMesh) playerIdleMesh.visible = true;
+                if (playerWalkMesh) playerWalkMesh.visible = false;
+                controls.minDistance = 4.0; controls.maxDistance = 15.0;
+                
+                controls.target.copy(player.position).y += 0.65;
+                camera.position.set(player.position.x, player.position.y + 5.5, player.position.z + 6.5);
+            }
+        }
+
+        function startGlitchRecording() {
+            isRecordingSequence = true; animationStage = 1; recordingTimer = 0;
+            document.getElementById('record-action-btn').style.display = 'none';
+            document.getElementById('alert-banner').innerText = "⚠️ RECORDING... COGNITIVE ANALYSIS ACTIVATED";
+        }
+
+        function enterPracticePhase() {
+            isPracticeGameActive = true; mockDistancePercent = 10;
+            updateLinkedRobotPosition(); 
+            document.getElementById('distance-pointer').style.left = mockDistancePercent + '%';
+            document.getElementById('practice-game-ui').style.display = 'block';
+            document.getElementById('quiz-section').style.display = 'none';
+
+            document.getElementById('viewfinder-ui').style.display = 'block'; 
+            document.getElementById('camera-toggle-btn').style.display = 'none'; 
+            
+            camera.position.set(player.position.x, player.position.y + 1.8, player.position.z);
+            controls.target.set(-2.0, 1.4, -3.5); 
+        }
+
+        function updateLinkedRobotPosition() {
+            if (glitchRobot) {
+                let targetX = -3.2 + (mockDistancePercent / 95.0) * 5.25;
+                glitchRobot.position.x = targetX;
+            }
+        }
+
+        function handleQuizAnswer(isCorrect) {
+            if(isCorrect) {
+                alert("✨【同步成功】！异常机器人已被重新写入边界代码，恢复正常！");
+                document.getElementById('practice-game-ui').style.display = 'none';
+                document.getElementById('camera-toggle-btn').style.display = 'block'; 
+                isPracticeGameActive = false;
+                isGlitchFixed = true; 
+
+                isCameraMode = true; 
+                toggleCameraMode(); 
+
+                glitchRobot.traverse(child => { 
+                    if(child.isMesh && child.material) {
+                        let mats = Array.isArray(child.material) ? child.material : [child.material];
+                        mats.forEach(mat => {
+                            if (mat.emissive && typeof mat.emissive.setHex === 'function') {
+                                mat.emissive.setHex(0x000000);
+                            }
+                        });
+                    }
+                });
+
+                const core = glitchRobot.getObjectByName("glitchCore"); 
+                if (core && core.parent) {
+                    core.parent.remove(core);
+                }
+                
+                const bubble = document.getElementById('bubble-glitch');
+                if (bubble) {
+                    // 🛠️ 修复2：异常机器人成功恢复时，彻底卸载红色危险类，还原成正常蓝绿色皮肤类
+                    bubble.classList.remove('is-silent', 'bubble-glitch');
+                    bubble.classList.add('bubble-normal');
+                    bubble.innerHTML = "🤖 新队员：<br>“你们也喜欢看昨晚的比赛吗？”";
+                    bubble.style.display = 'block';
+                }
+
+                isCelebrating = true;
+                celebrationTimer = 0;
+                document.getElementById('guide-banner').style.display = 'none'; 
+            } else {
+                alert("❌ 话题不同步！机器人的社交芯片产生了尴尬情绪，请重新阅读倾听内容并做出选择。");
+            }
+        }
+
+        /* 基于文字回退并挂载 CSS Animation 的气泡定位系统 */
+        function updateBubblePosition(elementId, worldPosition, yOffset = 2.4, rawText = "") {
+            const el = document.getElementById(elementId);
+            if (!el || !camera) return;
+            
+            if (currentPhase === 'exploration') {
+                el.style.display = 'none';
+                return;
+            } else if (currentPhase === 'silentTalk') {
+                // 🛠️ 回退无字部分为文字形式，增加 class 激活动态浮动与淡化呼吸感
+                el.classList.add('is-silent');
+                el.innerHTML = elementId === 'bubble-glitch' ? "🚨 💬 ···" : "👥 💬 ···";
+            } else if (currentPhase === 'activeCamera' || isGlitchFixed) {
+                el.classList.remove('is-silent');
+                el.innerHTML = rawText;
+            }
+
+            const wp = worldPosition.clone();
+            wp.y += yOffset;
+            wp.project(camera);
+
+            if(isNaN(wp.x) || isNaN(wp.y) || wp.z > 1.0) {
+                el.style.display = 'none';
+                return;
+            }
+
+            const x = (wp.x * 0.5 + 0.5) * window.innerWidth;
+            const y = (-(wp.y * 0.5) + 0.5) * window.innerHeight;
+
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            el.style.display = 'block'; 
+        }
+
+        function onKeyDown(event) {
+            if (isPracticeGameActive && !isRecordingSequence) {
+                if (event.code === 'ArrowLeft' || event.code === 'KeyA') mockDistancePercent = Math.max(0, mockDistancePercent - 2);
+                if (event.code === 'ArrowRight' || event.code === 'KeyD') mockDistancePercent = Math.min(95, mockDistancePercent + 2);
+                
+                document.getElementById('distance-pointer').style.left = mockDistancePercent + '%';
+                updateLinkedRobotPosition(); 
+                
+                if (mockDistancePercent >= 40 && mockDistancePercent <= 65) document.getElementById('quiz-section').style.display = 'block';
+                return;
+            }
+            switch (event.code) {
+                case 'KeyW': moveForward = true; break;
+                case 'KeyA': moveLeft = true; break;
+                case 'KeyS': moveBackward = true; break;
+                case 'KeyD': moveRight = true; break;
+                case 'Space': if (!isCameraMode && !isRecordingSequence && canJump) { playerVelocity.y = JUMP_FORCE; canJump = false; } break;
+            }
+            updatePlayerActionState(); 
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'KeyW': moveForward = false; break;
+                case 'KeyA': moveLeft = false; break;
+                case 'KeyS': moveBackward = false; break;
+                case 'KeyD': moveRight = false; break;
+            }
+            updatePlayerActionState(); 
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta(); const time = clock.getElapsedTime();
+
+            if (currentPhase !== 'activeCamera' && !isGlitchFixed) {
+                gameElapsedTime += delta;
+                if (currentPhase === 'exploration' && gameElapsedTime >= 10.0) {
+                    currentPhase = 'silentTalk';
+                    npcGroup.visible = true; 
+                    document.getElementById('camera-toggle-btn').style.display = 'block'; 
+                    document.getElementById('guide-banner').innerText = "📸 哨兵发现动静！点击右下角【开启巡逻相机】，近距离观察机器人在干什么吧！";
+                }
+            }
+
+            if (idleMixer) idleMixer.update(delta);
+            if (walkMixer) walkMixer.update(delta);
+            robotMixers.forEach(mixer => mixer.update(delta));
+
+            /* 规范文本长度和断行，层级交错错开 */
+            if (npcA1) updateBubblePosition('bubble-npc-a1', npcA1.position, 2.3, "👥 队员甲：<br>“昨晚太空棒球比赛太精彩了！”");
+            if (npcA2) updateBubblePosition('bubble-npc-a2', npcA2.position, 2.7, "👥 队员乙：<br>“是啊！那个本垒打打穿了星云！”");
+            if (npcB1) updateBubblePosition('bubble-npc-b1', npcB1.position, 3.1, "👥 交流组B：<br>“这次考察数据非常完美。”");
+
+            if (isGlitchFixed) {
+                if (isCelebrating) {
+                    setGlitchState('dance'); 
+                    celebrationTimer += delta;
+                    
+                    glitchRobot.position.y = Math.abs(Math.sin(celebrationTimer * 12)) * 0.6;
+                    glitchRobot.rotation.y += 10 * delta;
+                    
+                    if (celebrationTimer > 2.5) {
+                        isCelebrating = false;
+                        glitchRobot.position.y = 0;
+                        setGlitchState('talk'); 
+                        glitchRobot.position.set(-2.8, 0, -2.2); 
+                        glitchRobot.lookAt(-2.8, 0, -3.5); 
+                    }
+                }
+                // 恢复正常后高度规范为 2.4 层，与小组平齐
+                updateBubblePosition('bubble-glitch', glitchRobot.position, 2.4, "🤖 新队员：<br>“你们也喜欢看昨晚的比赛吗？”");
+            }
+
+            if (!isRecordingSequence && !isPracticeGameActive && glitchRobot && !isGlitchFixed) {
+                if (!isGlitchArrived) {
+                    setGlitchState('run'); 
+                    glitchRobot.position.lerp(GLITCH_TARGET_POS, 1.4 * delta);
+                    glitchRobot.lookAt(GLITCH_TARGET_POS.x, glitchRobot.position.y, GLITCH_TARGET_POS.z);
+                    document.getElementById('bubble-glitch').style.display = 'none';
+
+                    if (glitchRobot.position.distanceTo(GLITCH_TARGET_POS) < 0.2) {
+                        isGlitchArrived = true;
+                        glitchMoveTimer = 0;
+                    }
+                } else {
+                    setGlitchState('jump'); 
+                    glitchMoveTimer += delta;
+                    glitchRobot.lookAt(-2.8, glitchRobot.position.y, -3.5);
+                    
+                    /* 🛠️ 异常文字高度安全修正为 2.4，杜绝被推出页面顶部 */
+                    updateBubblePosition('bubble-glitch', glitchRobot.position, 2.4, "🚨 乱插话：<br>“我今天买了个新飞船！！”");
+
+                    if (glitchMoveTimer > 3.5) {
+                        glitchRobot.position.copy(GLITCH_START_POS);
+                        isGlitchArrived = false;
+                    }
+                }
+            }
+
+            if ((isCameraMode || isRecordingSequence) && !isPracticeGameActive) {
+                const flySpeed = 10.0 * delta;
+                const camDir = new THREE.Vector3();
+                camera.getWorldDirection(camDir);
+                const moveDir = new THREE.Vector3(camDir.x, 0, camDir.z).normalize();
+                const sideDir = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), moveDir).normalize();
+
+                const deltaPos = new THREE.Vector3();
+                if (moveForward) deltaPos.addScaledVector(moveDir, flySpeed);
+                if (moveBackward) deltaPos.addScaledVector(moveDir, -flySpeed);
+                if (moveLeft) deltaPos.addScaledVector(sideDir, flySpeed);
+                if (moveRight) deltaPos.addScaledVector(sideDir, -flySpeed);
+
+                camera.position.add(deltaPos);
+                controls.target.add(deltaPos); 
+
+                if (isRecordingSequence) {
+                    recordingTimer += delta;
+                    if (animationStage === 1 && recordingTimer > 1.5) { 
+                        animationStage = 2; 
+                    }
+                    if (animationStage === 2) {
+                        setGlitchState('jump'); 
+                        glitchRobot.position.lerp(new THREE.Vector3(-1.2, 0, -3.5), 0.1); 
+                        glitchRobot.rotation.y = Math.sin(time * 40) * 0.3; 
+                        updateBubblePosition('bubble-glitch', glitchRobot.position, 2.4, "🚨 乱插话：<br>“我今天买了个新飞船！！”");
+
+                        if (recordingTimer > 3.5) {
+                            isRecordingSequence = false; 
+                            animationStage = 0;
+                            document.getElementById('bubble-glitch').style.display = 'none';
+                            enterPracticePhase(); 
+                        }
+                    }
+                } else {
+                    raycaster.setFromCamera(mouse, camera);
+                    const intersects = raycaster.intersectObjects(scene.children, true);
+                    let foundGlitch = false;
+                    for (let i = 0; i < intersects.length; i++) {
+                        if (intersects[i].object.name === "Glitch_Target") { foundGlitch = true; break; }
+                    }
+                    document.getElementById('alert-banner').style.display = (foundGlitch && !isGlitchFixed) ? 'block' : 'none';
+                    document.getElementById('record-action-btn').style.display = (foundGlitch && !isGlitchFixed) ? 'block' : 'none';
+                }
+            } 
+            else if (!isCameraMode && !isRecordingSequence && !isPracticeGameActive && player) {
+                playerVelocity.y -= GRAVITY * delta; 
+                const direction = new THREE.Vector3(0, 0, 0);
+
+                const camDirection = new THREE.Vector3();
+                camera.getWorldDirection(camDirection);
+                camDirection.y = 0; camDirection.normalize();
+
+                const camRight = new THREE.Vector3();
+                camRight.crossVectors(new THREE.Vector3(0, 1, 0), camDirection).normalize().negate();
+
+                if (moveForward) direction.add(camDirection);
+                if (moveBackward) direction.add(camDirection.clone().negate());
+                if (moveLeft) direction.add(camRight.clone().negate());
+                if (moveRight) direction.add(camRight);
+
+                direction.normalize();
+
+                player.position.addScaledVector(direction, PLAYER_SPEED * delta); 
+                player.position.y += playerVelocity.y * delta;
+                
+                if (player.position.y < 0) { playerVelocity.y = 0; player.position.y = 0; canJump = true; }
+                if (direction.lengthSq() > 0) { player.rotation.y = Math.atan2(direction.x, direction.z); }
+
+                const camOffset = new THREE.Vector3().subVectors(camera.position, controls.target);
+                controls.target.copy(player.position);
+                controls.target.y += 0.65; 
+                camera.position.copy(player.position).add(camOffset);
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
