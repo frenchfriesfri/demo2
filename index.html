@@ -232,14 +232,14 @@
             document.getElementById("loading-text").innerText = `资源加载中 ${percent}%`;
             document.getElementById("progress-fill").style.width = percent + "%";
         };
+        let isGameReady = false;
 
         loadingManager.onLoad = function () {
             setTimeout(() => {
                 document.getElementById("loading-screen").style.opacity = "0"; // 触发淡出
-        
-             // 💡 核心修改：当加载屏开始淡出时，正式亮起 WASD 新手引导！
                 document.getElementById("guide-banner").style.display = "block"; 
-                
+                isGameReady = true;
+                clock.getDelta();
                 setTimeout(() => {
                     document.getElementById("loading-screen").style.display = "none";
                 }, 500); 
@@ -648,7 +648,12 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            const delta = clock.getDelta(); const time = clock.getElapsedTime();
+            const delta = clock.getDelta(); 
+            const time = clock.getElapsedTime();
+            if (!isGameReady) {
+                if (renderer && scene && camera) renderer.render(scene, camera);
+                return; 
+            }
 
             if (currentPhase !== 'activeCamera' && !isGlitchFixed) {
                 gameElapsedTime += delta;
