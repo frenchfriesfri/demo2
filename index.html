@@ -8,6 +8,17 @@
         body { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; user-select: none; background: #050510; }
         #game-container { width: 100vw; height: 100vh; position: absolute; top:0; left:0; z-index: 1; }
         
+        /* 加载屏样式 */
+        #loading-screen {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: #050510; z-index: 9999; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: #00ffcc;
+            transition: opacity 0.5s ease;
+        }
+        #loading-text { font-size: 24px; font-weight: bold; margin-bottom: 15px; letter-spacing: 2px;}
+        #progress-bar { width: 300px; height: 10px; border: 2px solid #00ffcc; border-radius: 5px; overflow: hidden; box-shadow: 0 0 15px rgba(0,255,204,0.3); }
+        #progress-fill { height: 100%; width: 0%; background: #00ffcc; transition: width 0.1s ease-out; }
+
         #ui-container { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; pointer-events: none; }
         
         #ui-layer {
@@ -16,7 +27,6 @@
         }
         h3 { margin: 0 0 10px 0; color: #00ffcc; }
         
-        /* 底部中央新手引导横条 */
         #guide-banner {
             position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%);
             background: rgba(10, 35, 80, 0.95); color: #00ffcc; padding: 14px 40px;
@@ -65,9 +75,11 @@
             box-shadow: 0 0 20px rgba(255,51,51,0.6); display: none; pointer-events: auto;
         }
 
-        /* 统一气泡基础样式 */
+        /* 🛠️ 性能优化1：将 left/top 固定为 0，启用 GPU 加速的 transform 渲染定位 */
         .html-bubble {
-            position: absolute; transform: translate(-50%, -100%);
+            position: absolute; top: 0; left: 0;
+            will-change: transform; /* 告诉浏览器这个元素会频繁位移 */
+            transform: translate3d(calc(var(--x, 0px) - 50%), calc(var(--y, 0px) - 100%), 0);
             padding: 10px 16px; font-size: 13px; font-weight: bold; border-radius: 10px;
             pointer-events: none; display: none; z-index: 999;
             width: max-content;
@@ -82,25 +94,12 @@
             border-width: 6px 6px 0; border-style: solid; display: block; width: 0;
         }
         
-        /* 正常/修复后的绿蓝色皮肤 */
-        .bubble-normal { 
-            background: rgba(5, 20, 45, 0.95); 
-            color: #00ffcc; 
-            border: 2px solid #00ffcc; 
-            box-shadow: 0 0 10px rgba(0,255,204,0.3); 
-        }
+        .bubble-normal { background: rgba(5, 20, 45, 0.95); color: #00ffcc; border: 2px solid #00ffcc; box-shadow: 0 0 10px rgba(0,255,204,0.3); }
         .bubble-normal::after { border-color: #00ffcc transparent; }
 
-        /* 故障时的红色皮肤 */
-        .bubble-glitch { 
-            background: rgba(120, 0, 15, 0.95); 
-            color: #ffffff; 
-            border: 2px solid #ff3333; 
-            box-shadow: 0 0 20px rgba(255,0,0,0.6);
-        }
+        .bubble-glitch { background: rgba(120, 0, 15, 0.95); color: #ffffff; border: 2px solid #ff3333; box-shadow: 0 0 20px rgba(255,0,0,0.6); }
         .bubble-glitch::after { border-color: #ff3333 transparent; }
 
-        /* 🛠️ 优化无字浮动气泡样式：用纯文字渲染，加上漂浮过渡特效 */
         .html-bubble.is-silent {
             padding: 6px 12px;
             font-size: 12px;
@@ -130,10 +129,10 @@
         @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
         @keyframes pulse-banner { 0% { transform: translateX(-50%) scale(1); } 100% { transform: translateX(-50%) scale(1.02); } }
         
-        /* 文字气泡优雅上下浮动、淡入淡出动感特效 */
+        /* 🛠️ 性能优化2：使用 CSS 变量进行动态浮动，配合 translate3d 不触发重绘 */
         @keyframes text-bubble-float {
-            0% { transform: translate(-50%, -90%); opacity: 0.5; }
-            100% { transform: translate(-50%, -115%); opacity: 1; }
+            0% { transform: translate3d(calc(var(--x, 0px) - 50%), calc(var(--y, 0px) - 90%), 0); opacity: 0.5; }
+            100% { transform: translate3d(calc(var(--x, 0px) - 50%), calc(var(--y, 0px) - 115%), 0); opacity: 1; }
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -142,6 +141,11 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/DRACOLoader.js"></script>
 </head>
 <body>
+
+    <div id="loading-screen">
+        <div id="loading-text">资源加载中 0%</div>
+        <div id="progress-bar"><div id="progress-fill"></div></div>
+    </div>
 
     <div id="game-container"></div>
 
@@ -220,7 +224,23 @@
         let playerVelocity = new THREE.Vector3();
         const PLAYER_SPEED = 14.0; const JUMP_FORCE = 10.0; const GRAVITY = 28.0; 
         let clock = new THREE.Clock();
-        const loader = new THREE.GLTFLoader();
+
+        const loadingManager = new THREE.LoadingManager();
+        loadingManager.onProgress = function (url, loaded, total) {
+            const percent = Math.round((loaded / total) * 100);
+            document.getElementById("loading-text").innerText = `资源加载中 ${percent}%`;
+            document.getElementById("progress-fill").style.width = percent + "%";
+        };
+        loadingManager.onLoad = function () {
+            setTimeout(() => {
+                document.getElementById("loading-screen").style.opacity = "0"; 
+                setTimeout(() => {
+                    document.getElementById("loading-screen").style.display = "none";
+                }, 500); 
+            }, 500);
+        };
+
+        const loader = new THREE.GLTFLoader(loadingManager);
         const dracoLoader = new THREE.DRACOLoader();
         dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
         loader.setDRACOLoader(dracoLoader);
@@ -265,9 +285,14 @@
             camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1500);
             camera.position.set(0, 5.5, 6.5); 
 
-            renderer = new THREE.WebGLRenderer({ antialias: true });
+            // 🛠️ 性能优化3：配置渲染器策略，抗锯齿动态判断，限制最大像素比
+            renderer = new THREE.WebGLRenderer({ 
+                antialias: window.devicePixelRatio <= 1,
+                powerPreference: "high-performance"
+            });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.enabled = false; // 关闭不必要的阴影计算
             renderer.outputEncoding = THREE.sRGBEncoding; 
             document.getElementById('game-container').appendChild(renderer.domElement);
 
@@ -518,11 +543,10 @@
                 
                 const bubble = document.getElementById('bubble-glitch');
                 if (bubble) {
-                    // 🛠️ 修复2：异常机器人成功恢复时，彻底卸载红色危险类，还原成正常蓝绿色皮肤类
                     bubble.classList.remove('is-silent', 'bubble-glitch');
                     bubble.classList.add('bubble-normal');
-                    bubble.innerHTML = "🤖 新队员：<br>“你们也喜欢看昨晚的比赛吗？”";
-                    bubble.style.display = 'block';
+                    // 仅更新数据缓存，让其重新渲染
+                    bubble.dataset.lastText = ""; 
                 }
 
                 isCelebrating = true;
@@ -533,38 +557,56 @@
             }
         }
 
-        /* 基于文字回退并挂载 CSS Animation 的气泡定位系统 */
+        /* 🛠️ 性能优化4：分离 DOM 操作，减少回流 (Reflow) */
         function updateBubblePosition(elementId, worldPosition, yOffset = 2.4, rawText = "") {
             const el = document.getElementById(elementId);
             if (!el || !camera) return;
             
-            if (currentPhase === 'exploration') {
-                el.style.display = 'none';
-                return;
-            } else if (currentPhase === 'silentTalk') {
-                // 🛠️ 回退无字部分为文字形式，增加 class 激活动态浮动与淡化呼吸感
-                el.classList.add('is-silent');
-                el.innerHTML = elementId === 'bubble-glitch' ? "🚨 💬 ···" : "👥 💬 ···";
-            } else if (currentPhase === 'activeCamera' || isGlitchFixed) {
-                el.classList.remove('is-silent');
-                el.innerHTML = rawText;
+            const targetPhase = isGlitchFixed ? 'fixed' : currentPhase;
+
+            // --- 核心优化：文本只在阶段或内容改变时更新一次 ---
+            if (el.dataset.lastPhase !== targetPhase || el.dataset.lastText !== rawText) {
+                if (targetPhase === 'exploration') {
+                    el.style.display = 'none';
+                } else if (targetPhase === 'silentTalk') {
+                    el.classList.add('is-silent');
+                    el.innerHTML = elementId === 'bubble-glitch' ? "🚨 💬 ···" : "👥 💬 ···";
+                    el.style.display = 'block';
+                } else if (targetPhase === 'activeCamera' || targetPhase === 'fixed') {
+                    el.classList.remove('is-silent');
+                    el.innerHTML = rawText;
+                    el.style.display = 'block';
+                }
+                el.dataset.lastPhase = targetPhase;
+                el.dataset.lastText = rawText;
             }
 
+            if (targetPhase === 'exploration') return;
+
+            // --- 每帧只进行位置计算，并使用 CSS 变量传值给 transform ---
             const wp = worldPosition.clone();
             wp.y += yOffset;
             wp.project(camera);
 
             if(isNaN(wp.x) || isNaN(wp.y) || wp.z > 1.0) {
-                el.style.display = 'none';
+                if(el.dataset.isVisible !== 'false') {
+                    el.style.display = 'none';
+                    el.dataset.isVisible = 'false';
+                }
                 return;
+            }
+
+            if(el.dataset.isVisible === 'false') {
+                el.style.display = 'block';
+                el.dataset.isVisible = 'true';
             }
 
             const x = (wp.x * 0.5 + 0.5) * window.innerWidth;
             const y = (-(wp.y * 0.5) + 0.5) * window.innerHeight;
 
-            el.style.left = `${x}px`;
-            el.style.top = `${y}px`;
-            el.style.display = 'block'; 
+            // 用 CSS 变量直接驱动 GPU 渲染位置，杜绝改动 left 和 top
+            el.style.setProperty('--x', `${x}px`);
+            el.style.setProperty('--y', `${y}px`);
         }
 
         function onKeyDown(event) {
@@ -637,7 +679,6 @@
                         glitchRobot.lookAt(-2.8, 0, -3.5); 
                     }
                 }
-                // 恢复正常后高度规范为 2.4 层，与小组平齐
                 updateBubblePosition('bubble-glitch', glitchRobot.position, 2.4, "🤖 新队员：<br>“你们也喜欢看昨晚的比赛吗？”");
             }
 
@@ -657,7 +698,6 @@
                     glitchMoveTimer += delta;
                     glitchRobot.lookAt(-2.8, glitchRobot.position.y, -3.5);
                     
-                    /* 🛠️ 异常文字高度安全修正为 2.4，杜绝被推出页面顶部 */
                     updateBubblePosition('bubble-glitch', glitchRobot.position, 2.4, "🚨 乱插话：<br>“我今天买了个新飞船！！”");
 
                     if (glitchMoveTimer > 3.5) {
